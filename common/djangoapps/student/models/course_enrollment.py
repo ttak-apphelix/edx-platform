@@ -747,7 +747,10 @@ class CourseEnrollment(models.Model):
                 course_key=course_key,
             )
             if check_access:
-                log.warning("User %s failed to enroll in non-existent course %s", user.username, str(course_key))
+                if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+                    log.warning("User %s failed to enroll in non-existent course %s", user.id, str(course_key))
+                else:
+                    log.warning("User %s failed to enroll in non-existent course %s", user.username, str(course_key))
                 raise NonExistentCourseError  # lint-amnesty, pylint: disable=raise-missing-from
 
         if check_access:
@@ -838,6 +841,9 @@ class CourseEnrollment(models.Model):
             return cls.enroll(user, course_id, mode)
         except User.DoesNotExist:
             err_msg = "Tried to enroll email {} into course {}, but user not found"
+            if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+            log.error(err_msg.format('[PII_REDACTED]', course_id))
+        else:
             log.error(err_msg.format(email, course_id))
             if ignore_errors:
                 return None

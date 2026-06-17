@@ -475,7 +475,10 @@ def change_enrollment(request, check_access=True):
         except UnenrollmentNotAllowed as exc:
             return HttpResponseBadRequest(str(exc))
 
-        log.info("User %s unenrolled from %s; sending REFUND_ORDER", user.username, course_id)
+        if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+            log.info("User %s unenrolled from %s; sending REFUND_ORDER", user.id, course_id)
+        else:
+            log.info("User %s unenrolled from %s; sending REFUND_ORDER", user.username, course_id)
         REFUND_ORDER.send(sender=None, course_enrollment=enrollment)
         return HttpResponse()
     else:
@@ -543,11 +546,17 @@ def disable_account_ajax(request):
         if account_action == 'disable':
             user_account.account_status = UserStanding.ACCOUNT_DISABLED
             context['message'] = _("Successfully disabled {}'s account").format(username)
-            log.info("%s disabled %s's account", request.user, username)
+            if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+                log.info("%s disabled user %s's account", request.user.id, '[PII_REDACTED]')
+            else:
+                log.info("%s disabled %s's account", request.user, username)
         elif account_action == 'reenable':
             user_account.account_status = UserStanding.ACCOUNT_ENABLED
             context['message'] = _("Successfully reenabled {}'s account").format(username)
-            log.info("%s reenabled %s's account", request.user, username)
+            if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+                log.info("%s reenabled user %s's account", request.user.id, '[PII_REDACTED]')
+            else:
+                log.info("%s reenabled %s's account", request.user, username)
         else:
             context['message'] = _("Unexpected account status")
             return JsonResponse(context, status=400)
@@ -831,10 +840,16 @@ def do_email_change_request(user, new_email, activation_key=None, secondary_emai
 
     try:
         ace.send(msg)
-        log.info("Email activation link sent to user [%s].", new_email)
+        if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+            log.info("Email activation link sent for user ID: [%s].", user.id)
+        else:
+            log.info("Email activation link sent to user [%s].", new_email)
     except Exception:
         from_address = configuration_helpers.get_value('email_from_address', settings.DEFAULT_FROM_EMAIL)
-        log.error('Unable to send email activation link to user from "%s"', from_address, exc_info=True)
+        if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+            log.error('Unable to send email activation link from a redacted address', exc_info=True)
+        else:
+            log.error('Unable to send email activation link to user from "%s"', from_address, exc_info=True)
         raise ValueError(_('Unable to send email activation link. Please try again later.'))  # lint-amnesty, pylint: disable=raise-missing-from
 
     if not secondary_email_change_request:
@@ -944,7 +959,10 @@ def confirm_email_change(request, key):
         try:
             ace.send(msg)
         except Exception:  # pylint: disable=broad-except
-            log.warning('Unable to send confirmation email to old address', exc_info=True)
+            if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+                log.warning('Unable to send confirmation email to old address [REDACTED]', exc_info=True)
+            else:
+                log.warning('Unable to send confirmation email to old address', exc_info=True)
             response = render_to_response("email_change_failed.html", {'email': user.email})
             transaction.set_rollback(True)
             return response
@@ -960,7 +978,10 @@ def confirm_email_change(request, key):
         try:
             ace.send(msg)
         except Exception:  # pylint: disable=broad-except
-            log.warning('Unable to send confirmation email to new address', exc_info=True)
+            if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+                log.warning('Unable to send confirmation email to new address [REDACTED]', exc_info=True)
+            else:
+                log.warning('Unable to send confirmation email to new address', exc_info=True)
             response = render_to_response("email_change_failed.html", {'email': user.email})
             transaction.set_rollback(True)
             return response

@@ -28,6 +28,7 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict, namedtuple
 
 from django.db import DatabaseError, IntegrityError, transaction
+from django.conf import settings
 from opaque_keys.edx.asides import AsideUsageKeyV1, AsideUsageKeyV2
 from opaque_keys.edx.block_types import BlockTypeKeyV1
 from opaque_keys.edx.keys import LearningContextKey
@@ -405,7 +406,10 @@ class UserStateCache:
                 pending_updates
             )
         except DatabaseError:
-            log.exception("Saving user state failed for %s", self.user.username)
+            if settings.FEATURES['SQUELCH_PII_IN_LOGS']:
+                log.exception("Saving user state failed for user ID %s", self.user.id)
+            else:
+                log.exception("Saving user state failed for %s", self.user.username)
             raise KeyValueMultiSaveError([])  # lint-amnesty, pylint: disable=raise-missing-from
         finally:
             self._cache.update(pending_updates)
